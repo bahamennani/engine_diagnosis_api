@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Engine Sound Classifier</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Engine Fault Detection</h1>
+        <form id="upload-form" method="post" enctype="multipart/form-data">
+            <label for="engine_type">Select Engine Type:</label>
+            <select name="engine_type" id="engine_type" required>
+                <option value="essence">Essence</option>
+                <option value="diesel">Diesel</option>
+            </select>
+
+            <label for="audio">Upload Engine Audio (.wav):</label>
+            <input type="file" name="audio" id="audio" accept=".wav" required>
+
+            <button type="submit">Classify</button>
+        </form>
+
+        <div id="result" class="result-box"></div>
+    </div>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const form = new FormData(this);
+            const response = await fetch("/predict", { method: "POST", body: form });
+            const result = await response.json();
+            document.getElementById('result').innerHTML =
+                result.error ? `<p class="error">${result.error}</p>` :
+                `<p><strong>Prediction:</strong> ${result.prediction}</p><p><strong>Confidence:</strong> ${result.confidence}%</p>`;
+        });
+    </script>
+</body>
+</html>
