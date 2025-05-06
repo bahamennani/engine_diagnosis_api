@@ -1,5 +1,10 @@
 FROM python:3.10-slim
 
+# تثبيت ffmpeg والحزم الضرورية
+RUN apt-get update && \
+    apt-get install -y ffmpeg libsndfile1 libgl1 && \
+    apt-get clean
+
 # إعداد مجلد العمل
 WORKDIR /app
 
