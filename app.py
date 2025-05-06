@@ -1,3 +1,5 @@
+import traceback
+
 from flask import Flask, request, jsonify, render_template
 import librosa
 import numpy as np
@@ -63,19 +65,29 @@ def predict():
     if engine_type not in MODELS:
         return jsonify({"error": "Invalid engine type"}), 400
 
-    # حفظ ملف aac المؤقت
-    aac_file = request.files["audio"]
-    aac_path = f"{uuid.uuid4()}.aac"
-    aac_file.save(aac_path)
+    audio_file = request.files["audio"]
+    filename = audio_file.filename.lower()
 
-    wav_path = f"{uuid.uuid4()}.wav"
+    original_path = f"{uuid.uuid4()}"
     image_path = None
-    try:
-        # تحويل AAC إلى WAV
-        audio = AudioSegment.from_file(aac_path, format="aac")
-        audio.export(wav_path, format="wav")
 
-        # spectrogram
+    try:
+        # التحقق من نوع الملف (AAC أو WAV)
+        if filename.endswith(".aac"):
+            aac_path = f"{original_path}.aac"
+            wav_path = f"{original_path}.wav"
+            audio_file.save(aac_path)
+
+            # تحويل AAC إلى WAV
+            audio = AudioSegment.from_file(aac_path, format="aac")
+            audio.export(wav_path, format="wav")
+        elif filename.endswith(".wav"):
+            wav_path = f"{original_path}.wav"
+            audio_file.save(wav_path)
+        else:
+            return jsonify({"error": "Unsupported audio format. Please upload .wav or .aac file"}), 400
+
+        # تحويل WAV إلى spectrogram
         image_path = audio_to_spectrogram(wav_path)
         img = preprocess_image(image_path)
 
@@ -85,25 +97,29 @@ def predict():
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
 
-        # تمرير الصورة
         interpreter.set_tensor(input_details[0]['index'], img)
         interpreter.invoke()
         output_data = interpreter.get_tensor(output_details[0]['index'])
 
-        # النتيجة
         predicted_class_index = np.argmax(output_data)
         prediction = MODELS[engine_type]["labels"][predicted_class_index]
         confidence = float(output_data[0][predicted_class_index])
 
         return jsonify({"prediction": prediction, "confidence": round(confidence, 2)})
 
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
     finally:
         # حذف الملفات المؤقتة
-        for file_path in [aac_path, wav_path, image_path]:
-            if file_path and os.path.exists(file_path):
+        for ext in [".aac", ".wav", ".png"]:
+            file_path = f"{original_path}{ext}"
+            if os.path.exists(file_path):
                 os.remove(file_path)
         plt.close('all')
         gc.collect()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
