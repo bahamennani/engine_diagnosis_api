@@ -1,22 +1,28 @@
 FROM python:3.10-slim
 
-# تثبيت ffmpeg والحزم الضرورية
+# تثبيت ffmpeg والحزم الضرورية فقط
 RUN apt-get update && \
-    apt-get install -y ffmpeg libsndfile1 libgl1 && \
-    apt-get clean
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    libgl1 \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # إعداد مجلد العمل
 WORKDIR /app
 
-# نسخ وتثبيت التبعيات
+# نسخ متطلبات التشغيل
 COPY requirements.txt .
+
+# تثبيت التبعيات
 RUN pip install --no-cache-dir -r requirements.txt
 
-# نسخ بقية ملفات المشروع
+# نسخ باقي الملفات
 COPY . .
 
-# فتح البورت الذي يستخدمه render (5000)
+# فتح المنفذ
 EXPOSE 5000
 
-# استخدام gunicorn لتشغيل التطبيق
+# تشغيل التطبيق باستخدام gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
