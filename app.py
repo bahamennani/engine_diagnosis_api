@@ -9,23 +9,34 @@ import cv2
 import uuid
 import os
 import tensorflow as tf
-import pickle
 import gc
 from pydub import AudioSegment
 
 app = Flask(__name__)
 
-# إعداد المسارات
+# إعداد المسارات والنماذج المُحمّلة
 MODELS = {
     "essence": {
-        "model": "models/cnn_model_essence.tflite",
+        "model_path": "models/cnn_model_essence.tflite",
         "labels": ["Healthy engine", "Raté d'allumage", "Consommation d'huile", "Ralenti instable"]
     },
     "diesel": {
-        "model": "models/cnn_model_diesel.tflite",
+        "model_path": "models/cnn_model_diesel.tflite",
         "labels": ["Healthy engine", "Damaged engine"]
     }
 }
+
+# تحميل النماذج وتخزينها في الذاكرة (مرة واحدة)
+INTERPRETERS = {}
+INPUT_DETAILS = {}
+OUTPUT_DETAILS = {}
+
+for engine_type, data in MODELS.items():
+    interpreter = tf.lite.Interpreter(model_path=data["model_path"])
+    interpreter.allocate_tensors()
+    INTERPRETERS[engine_type] = interpreter
+    INPUT_DETAILS[engine_type] = interpreter.get_input_details()
+    OUTPUT_DETAILS[engine_type] = interpreter.get_output_details()
 
 IMG_SIZE = (128, 128)
 
@@ -72,7 +83,7 @@ def predict():
     image_path = None
 
     try:
-        # التحقق من نوع الملف (AAC أو WAV)
+        # التحقق من نوع الملف
         if filename.endswith(".aac"):
             aac_path = f"{original_path}.aac"
             wav_path = f"{original_path}.wav"
@@ -91,11 +102,10 @@ def predict():
         image_path = audio_to_spectrogram(wav_path)
         img = preprocess_image(image_path)
 
-        # تحميل النموذج
-        interpreter = tf.lite.Interpreter(model_path=MODELS[engine_type]["model"])
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
+        # استخدام النموذج المُحمّل مسبقًا
+        interpreter = INTERPRETERS[engine_type]
+        input_details = INPUT_DETAILS[engine_type]
+        output_details = OUTPUT_DETAILS[engine_type]
 
         interpreter.set_tensor(input_details[0]['index'], img)
         interpreter.invoke()
@@ -119,7 +129,6 @@ def predict():
                 os.remove(file_path)
         plt.close('all')
         gc.collect()
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
